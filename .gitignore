@@ -1,0 +1,17 @@
+node_modules/
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+*.pfx
+*.p12
+*.ppk
+.aws/
+id_rsa
+id_ed25519
+
+/CLOUD_INVENTORY_API_CONTEXT.md
+/Lab_Project_Cloud_Computing_AWS_Lab_Project_Briefing_Updated (1).pdf
+/545465_AxelUrwawuskaAtarubby_CC.docx
