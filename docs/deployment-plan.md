@@ -1,45 +1,137 @@
-# AWS Learner Lab deployment plan
+# AWS Learner Lab deployment guide
 
-The planned Track A deployment runs the Express API on EC2 and uses a Single-AZ RDS for MySQL instance. Use the [planned architecture diagram](architecture.png) during the lab review.
+The Cloud Inventory API was deployed and tested on 26 November 2026 in the AWS Academy Cloud Foundations Sandbox. The deployment followed Track A and used an Express API on EC2 with a private, Single-AZ RDS for MySQL instance. The lab session has ended.
 
-## Review the lab before provisioning
+[Final architecture diagram](architecture.png) · [Editable Draw.io source](architecture.drawio)
 
-Confirm the remaining lab credits, permitted region and resource types, available IAM roles, access method, VPC and subnets, and estimated cost. Choose the EC2 OS and a supported Node.js 22 patch release together. Choose a supported MySQL version that enforces the schema's check constraints. Review backup, storage, and cleanup requirements with the student.
+## Week 12 deployment configuration
 
-## Configure the network and instances
+The deployment used `us-east-1` (N. Virginia). The Lab VPC used `10.0.0.0/16` with DNS resolution and DNS hostnames enabled.
 
-1. Use one permitted VPC. If direct access is allowed, put EC2 in a public subnet with a public IPv4 address and a route through an internet gateway. Allow TCP 3000 from the student's current public IP as a `/32`. Allow TCP 22 from the same source only if SSH is the chosen access method.
-2. Use a DB subnet group covering suitable private subnets in at least two Availability Zones. Create the RDS instance as Single-AZ with public access disabled. Set its security group to allow TCP 3306 from the EC2 security group.
-3. Use the existing approved Learner Lab permissions for AWS operations and any permitted instance role. MySQL authentication uses a separate database account.
+| Subnet | CIDR | Availability Zone | Workload and routing |
+| --- | --- | --- | --- |
+| Public | `10.0.1.0/24` | `us-east-1a` | EC2 with a public IPv4 address. The public route table sent `0.0.0.0/0` to the lab internet gateway. |
+| Private DB A | `10.0.2.0/24` | `us-east-1a` | Active Single-AZ RDS instance. The main route table provided local VPC routing only. |
+| Private DB B | `10.0.3.0/24` | `us-east-1b` | Second member of the DB subnet group. Local VPC routing only. |
 
-See the AWS documentation for [VPC and DB subnet groups](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.WorkingWithRDSInstanceinaVPC.html) and [EC2-to-RDS VPC scenarios](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.Scenarios.html).
+Both private subnets belonged to `inventory-db-subnet-group`. The RDS instance ran in `us-east-1a`. The deployment used no NAT gateway. The lab VPC's existing S3 gateway endpoint was unused by the application.
 
-## Set up the database and API on EC2
+| Component | Configuration used in the lab |
+| --- | --- |
+| EC2 | `inventory-api-server`, `t3.micro`, Amazon Linux 2023 x86_64, 8 GiB gp2, IMDSv2 required |
+| EC2 security group | `inventory-ec2-sg`, inbound TCP 3000 from the student's public IPv4 `/32` only, default outbound, no inbound SSH |
+| EC2 management | Browser-based Systems Manager Session Manager as `ssm-user`, using the existing `LabRole` through `LabInstanceProfile` and temporary Learner Lab permissions |
+| RDS | `inventory-mysql`, MySQL Community 8.4.11, `db.t3.micro`, Single-AZ, public access disabled |
+| RDS storage | 20 GiB gp2, as reported by the student |
+| RDS security group | `inventory-rds-sg`, inbound TCP 3306 from `inventory-ec2-sg` only |
+| Runtime on EC2 | Node.js 22.23.5, npm 10.9.9, Git 2.50.1, MariaDB client 10.5.29 |
 
-1. Use the approved access method to connect to EC2. Transfer the tracked project files using an approved method. Use GitHub only after repository publication is authorized.
-2. Install Node.js 22, npm, Bash, cURL, and a compatible MySQL command-line client using the instructions for the selected EC2 OS. Verify `node --version` and `npm --version`, then run `npm ci` in the project directory.
-3. Obtain the trusted CA bundle for the selected RDS region and certificate. From EC2, verify DNS, TLS hostname validation, and MySQL login using the RDS endpoint. Open the MySQL client as the database administrator from the project root. The client prompts for the password.
+The API accepted HTTP on port 3000 from the student's authorized address for the lab demo. EC2 connected to the RDS DNS endpoint on port 3306 over TLS. The instance profile supported Systems Manager access. MySQL authentication used a dedicated database user.
 
-   ```bash
-   mysql --host RDS_ENDPOINT --port 3306 --user DB_ADMIN --password \
-     --ssl-mode=VERIFY_IDENTITY --ssl-ca=/path/to/rds-ca-bundle.pem
-   ```
+## Reproduce the deployment in an authorized lab
 
-   In the MySQL client, check the connection and initialize the schema.
+Confirm the lab's allowed region, instance types, IAM profile, spending limits, and cleanup rules before creating resources. Use one VPC with the public and private routing shown above. Configure the EC2 and RDS security groups before testing. Keep the RDS subnet group across two Availability Zones and the database instance Single-AZ with public access disabled.
 
-   ```sql
-   SELECT 1;
-   SOURCE db/schema.sql
-   ```
+### 1. Install the runtime on EC2
 
-   [AWS MySQL TLS client instructions](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_ConnectToInstanceSSL.CLI.html) and [RDS CA bundles](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html) cover certificate configuration.
+Open a browser-based Session Manager terminal. The following commands were used on Amazon Linux 2023.
 
-4. Create a dedicated MySQL app user with only `SELECT`, `INSERT`, `UPDATE`, and `DELETE` on `inventory_db.items`. Use a private MySQL session without persistent command history when entering account secrets.
-5. Create `.env` on EC2 with restricted permissions. Set `HOST=0.0.0.0` for authorized direct access, or keep the loopback default when using an approved tunnel. Set `PORT=3000`, `DB_HOST` to the RDS DNS endpoint, `DB_PORT=3306`, `DB_NAME=inventory_db`, the dedicated `DB_USER` and `DB_PASSWORD`, and `DB_SSL_CA` to the CA bundle path. Start the API with `npm start`.
+```bash
+sudo dnf install -y nodejs22 nodejs22-npm git mariadb105
+cd "$HOME"
+git clone https://github.com/ggalangswt/cloud-inventory-api.git
+cd cloud-inventory-api
+npm ci
+npm test
+```
 
-## Verify and collect evidence
+### 2. Verify TLS and initialize MySQL
 
-- Run `curl -i http://127.0.0.1:3000/health` and `curl -i http://127.0.0.1:3000/health/db` from EC2. Both should return 200. If database health returns 503, check the RDS instance state, endpoint, security group source, MySQL credentials, and TLS configuration.
-- Run `bash scripts/smoke-test.sh http://127.0.0.1:3000` on EC2. Expect the two health checks to return 200 and the CRUD operations to return 201, 200, 200, and 204.
-- Open Swagger at `/docs` from an authorized client. Capture the actual EC2 and RDS settings, VPC and subnet setup, security groups, EC2 access, MySQL connectivity, and API test output with secrets excluded.
-- Record the deployed settings and revise the diagram for the final report. Review lab resource state, ongoing charges, and cleanup with the student after collecting evidence.
+Download the RDS CA bundle for the deployment region. From the repository root, open the MariaDB client with the RDS DNS endpoint substituted for `RDS_ENDPOINT`. The client prompts for the admin password.
+
+```bash
+mkdir -p "$HOME/certs"
+curl -fL https://truststore.pki.rds.amazonaws.com/us-east-1/us-east-1-bundle.pem \
+  -o "$HOME/certs/rds-ca-bundle.pem"
+
+MYSQL_HISTFILE=/dev/null mysql -h RDS_ENDPOINT -P 3306 -u admin -p \
+  --ssl-ca="$HOME/certs/rds-ca-bundle.pem" --ssl-verify-server-cert --connect-timeout=10
+```
+
+In the SQL client, check the connection and initialize the schema.
+
+```sql
+SELECT VERSION();
+SELECT 1 AS connection_test;
+SHOW SESSION STATUS LIKE 'Ssl_version';
+SHOW SESSION STATUS LIKE 'Ssl_cipher';
+SOURCE db/schema.sql
+SHOW TABLES;
+DESCRIBE items;
+SELECT * FROM items;
+```
+
+Create the dedicated application user once. Save the generated password privately and grant the user access to the inventory table.
+
+```sql
+CREATE USER 'inventory_app'@'%' IDENTIFIED BY RANDOM PASSWORD REQUIRE SSL;
+GRANT SELECT, INSERT, UPDATE, DELETE ON inventory_db.items TO 'inventory_app'@'%';
+```
+
+Reconnect over TLS as `inventory_app` using the same connection flags. Use `SELECT CURRENT_USER()`, `SHOW GRANTS`, and a `SELECT` on `inventory_db.items` to verify the account and access.
+
+### 3. Configure and start the API
+
+In a fresh checkout, create `.env` from `.env.example` and set its permissions to `600`. Fill in the values privately using the deployed RDS DNS endpoint, the generated application password, and the local CA path.
+
+```dotenv
+HOST=0.0.0.0
+PORT=3000
+DB_HOST=RDS_ENDPOINT
+DB_PORT=3306
+DB_NAME=inventory_db
+DB_USER=inventory_app
+DB_PASSWORD=YOUR_APPLICATION_PASSWORD
+DB_SSL_CA=/home/ssm-user/certs/rds-ca-bundle.pem
+```
+
+Run `npm start` in the foreground in Session Manager. Open a second session for the checks below.
+
+### 4. Verify the API and collect evidence
+
+```bash
+curl -i http://127.0.0.1:3000/health
+curl -i http://127.0.0.1:3000/health/db
+bash scripts/smoke-test.sh http://127.0.0.1:3000
+```
+
+Check Swagger UI at `http://EC2_PUBLIC_IPV4:3000/docs` from the address allowed by the EC2 security group. If database health returns `503`, check the RDS DNS endpoint, application login, TLS settings, and the security group source. Capture networking, access, schema, and test evidence privately.
+
+## Week 12 verification results
+
+These results were recorded during the original lab session.
+
+- On EC2, `npm ci` installed 100 packages and reported 0 vulnerabilities at the time. All 18 automated tests passed with a database mock.
+- The MySQL client returned version `8.4.11` and `1` for `SELECT 1 AS connection_test`. Certificate verification succeeded and the session negotiated TLS 1.3 with `TLS_AES_256_GCM_SHA384`.
+- The schema created the seven-column `items` table in the existing database. The table was initially empty. The client emitted one warning whose text was not captured. The application user's login, grants, and read access were verified.
+- After the RDS hostname and application password in `.env` were corrected, both browser health endpoints returned `{"status":"ok"}`. Swagger displayed all six endpoints. The API ran as a foreground Session Manager process.
+- The smoke test ran from EC2 against the API connected to RDS and returned the following output.
+
+```text
+$ bash scripts/smoke-test.sh http://127.0.0.1:3000
+GET /health -> 200
+GET /health/db -> 200
+POST /items -> 201
+GET /items -> 200
+PUT /items/1 -> 200
+DELETE /items/1 -> 204
+Smoke test passed.
+```
+
+## Lab shutdown
+
+After evidence collection, the student chose **End Lab** and the console reported resources terminating. Final deletion was not independently verified. For future runs, verify resource state and any ongoing charges according to the lab's cleanup rules.
+
+## Proposed improvements
+
+The final diagram labels four future improvements as proposed. An Application Load Balancer could terminate HTTPS and distribute traffic, EC2 Auto Scaling could adjust capacity, CloudWatch could collect application logs and monitoring data, and Secrets Manager could store database credentials.

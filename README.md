@@ -1,6 +1,6 @@
 # Cloud Inventory API
 
-A small REST API for tracking equipment in a student organization. This Cloud Computing Week 12 project follows Track A (Cloud VM). The planned deployment runs Express on Amazon EC2 and stores one `items` entity in Amazon RDS for MySQL.
+A small REST API for tracking equipment in a student organization. This Cloud Computing Week 12 project follows Track A (Cloud VM). During the Week 12 AWS Learner Lab, the Express API ran on Amazon EC2 and stored its `items` entity in Amazon RDS for MySQL.
 
 ## Run locally
 
@@ -54,7 +54,10 @@ With a running API and initialized MySQL database, run the cURL smoke test in Ba
 bash scripts/smoke-test.sh http://127.0.0.1:3000
 ```
 
-## Deployment
+## AWS deployment
 
-- [Planned AWS architecture](docs/architecture.png)
-- [EC2 and RDS deployment plan](docs/deployment-plan.md)
+The API was deployed and verified in the Week 12 sandbox. On EC2, all 18 automated tests passed with an injected database substitute. The cloud smoke test used the real RDS database and passed both health checks and all four CRUD operations. The lab session has ended, so use the local setup above to run the API.
+
+- [Final AWS architecture](docs/architecture.png) and [editable Draw.io source](docs/architecture.drawio)
+- [EC2 and RDS deployment guide](docs/deployment-plan.md)
+- [Week 12 verification results](docs/deployment-plan.md#week-12-verification-results)
