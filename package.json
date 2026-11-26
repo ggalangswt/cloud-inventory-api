@@ -8,6 +8,11 @@
     "node": "22.x"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.3.0",
     "mysql2": "^3.24.6"
+  },
+  "scripts": {
+    "start": "node src/server.js"
   }
 }
