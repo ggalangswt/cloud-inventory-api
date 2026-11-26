@@ -1,0 +1,207 @@
+openapi: 3.0.3
+info:
+  title: Cloud Inventory API
+  version: 1.0.0
+  description: Inventory management for a student organization.
+servers:
+  - url: /
+paths:
+  /items:
+    get:
+      summary: List inventory items in ID order
+      responses:
+        '200':
+          description: Inventory list, which may be empty.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Item'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      summary: Create an inventory item
+      requestBody:
+        $ref: '#/components/requestBodies/ItemInput'
+      responses:
+        '201':
+          description: Created item with its assigned ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemWriteResult'
+        '400':
+          $ref: '#/components/responses/InvalidInput'
+        '413':
+          $ref: '#/components/responses/BodyTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedEncoding'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /items/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+    put:
+      summary: Replace the editable fields on an existing item
+      requestBody:
+        $ref: '#/components/requestBodies/ItemInput'
+      responses:
+        '200':
+          description: Updated item fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemWriteResult'
+        '400':
+          $ref: '#/components/responses/InvalidInput'
+        '404':
+          $ref: '#/components/responses/ItemNotFound'
+        '413':
+          $ref: '#/components/responses/BodyTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedEncoding'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      summary: Delete an inventory item
+      responses:
+        '204':
+          description: Deleted successfully. The response has no body.
+        '400':
+          $ref: '#/components/responses/InvalidInput'
+        '404':
+          $ref: '#/components/responses/ItemNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /health:
+    get:
+      summary: Check API liveness
+      responses:
+        '200':
+          $ref: '#/components/responses/Healthy'
+  /health/db:
+    get:
+      summary: Check MySQL connectivity
+      responses:
+        '200':
+          $ref: '#/components/responses/Healthy'
+        '503':
+          description: Database unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  requestBodies:
+    ItemInput:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ItemInput'
+          example:
+            name: Projector
+            category: Electronics
+            quantity: 3
+            item_condition: good
+  responses:
+    Healthy:
+      description: Check passed.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [status]
+            properties:
+              status:
+                type: string
+                enum: [ok]
+    InvalidInput:
+      description: Invalid item fields, item ID, or JSON.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ItemNotFound:
+      description: The item does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    BodyTooLarge:
+      description: The JSON body exceeds the size limit.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UnsupportedEncoding:
+      description: Unsupported JSON character set or body encoding.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalError:
+      description: Unexpected failure.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    ItemInput:
+      type: object
+      required: [name, category, quantity, item_condition]
+      properties:
+        name:
+          type: string
+          description: The API trims surrounding whitespace and requires a nonblank value.
+          minLength: 1
+          maxLength: 100
+        category:
+          type: string
+          description: The API trims surrounding whitespace and requires a nonblank value.
+          minLength: 1
+          maxLength: 50
+        quantity:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+        item_condition:
+          type: string
+          enum: [good, damaged, maintenance]
+    ItemWriteResult:
+      allOf:
+        - $ref: '#/components/schemas/ItemInput'
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: integer
+              minimum: 1
+              maximum: 2147483647
+    Item:
+      allOf:
+        - $ref: '#/components/schemas/ItemWriteResult'
+        - type: object
+          required: [created_at, updated_at]
+          properties:
+            created_at:
+              type: string
+              description: MySQL session time, formatted as YYYY-MM-DD HH:mm:ss.
+              example: '2026-11-26 10:00:00'
+            updated_at:
+              type: string
+              description: MySQL session time, formatted as YYYY-MM-DD HH:mm:ss.
+              example: '2026-11-26 10:15:00'
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

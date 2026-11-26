@@ -1,6 +1,11 @@
+import { readFileSync } from 'node:fs';
 import express from 'express';
+import swaggerUi from 'swagger-ui-express';
+import { parse } from 'yaml';
 import { createHealthRouter } from './routes/health.routes.js';
 import { createItemRouter } from './routes/item.routes.js';
+
+const openapi = parse(readFileSync(new URL('../docs/openapi.yaml', import.meta.url), 'utf8'));
 
 export function createApp(pool) {
   const app = express();
@@ -9,6 +14,7 @@ export function createApp(pool) {
   app.use(express.json());
   app.use('/health', createHealthRouter(pool));
   app.use('/items', createItemRouter(pool));
+  app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapi));
 
   app.use((req, res) => {
     res.status(404).json({ error: 'Route not found' });

@@ -3,7 +3,7 @@ const ITEM_CONDITIONS = new Set(['good', 'damaged', 'maintenance']);
 
 export function validateItemId(req, res, next, rawId) {
   const id = Number(rawId);
-  if (!/^[1-9]\d*$/.test(rawId) || id > MAX_SQL_INT) {
+  if (!Number.isInteger(id) || id < 1 || id > MAX_SQL_INT || String(id) !== rawId) {
     return res.status(400).json({ error: 'Invalid item ID' });
   }
 
